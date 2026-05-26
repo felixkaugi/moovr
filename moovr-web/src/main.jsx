@@ -1,0 +1,14 @@
+import { createRoot } from "react-dom/client";
+import "./index.css";
+import App from "./App.jsx";
+import "slick-carousel/slick/slick.css";
+import "slick-carousel/slick/slick-theme.css";
+import { Toaster } from "react-hot-toast";
+import { SocketProvider } from "./context/LocationProvider.jsx";
+
+createRoot(document.getElementById("root")).render(
+  <SocketProvider>
+    <Toaster />
+    <App />
+  </SocketProvider>
+);
