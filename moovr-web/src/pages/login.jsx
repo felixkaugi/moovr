@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from "react";
 import PhoneInput from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
-import { auth, googleProvider } from "../firebase";
-import { signInWithPopup, signInWithPhoneNumber, RecaptchaVerifier } from "firebase/auth";
+import { auth, googleProvider, sendOtp } from "../firebase";
+import { signInWithPopup } from "firebase/auth";
 import toast from "react-hot-toast";
-import { getStableRecaptchaVerifier } from "../utils/recaptcha";
 
 const Login = () => {
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -39,12 +38,8 @@ const Login = () => {
     }
 
     try {
-      const appVerifier = await getStableRecaptchaVerifier();
-      if (!appVerifier) {
-        throw new Error("reCAPTCHA failed to initialize. Please refresh the page.");
-      }
-
-      const confirmation = await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
+      console.log("Attempting to send OTP via sendOtp helper (Login)...");
+      const confirmation = await sendOtp(phoneNumber);
       setConfirmationResult(confirmation);
       toast.success("OTP sent to your phone!");
     } catch (error) {
@@ -93,7 +88,6 @@ const Login = () => {
                   Continue
                 </button>
               </form>
-              <div id="recaptcha-container"></div>
             </>
           ) : (
             <>

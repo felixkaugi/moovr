@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 
-const CompletedCard = ({ title, path, driverId, driverName, buttonText = "Rate your ride", message }) => {
+const CompletedCard = ({ title, path, driverId, driverName, rideId, buttonText = "Rate your ride", message }) => {
   return (
     <div className=" bg-white rounded-2xl shadow-lg p-8 w-96 text-center">
       <h2 className="font-semibold text-gray-800 mb-2">{title}</h2>
@@ -14,7 +14,7 @@ const CompletedCard = ({ title, path, driverId, driverName, buttonText = "Rate y
           />
         </div>
       </div>
-      <Link to={path} state={{ driverId, driverName }}>
+      <Link to={path} state={{ driverId, driverName, rideId }}>
         <button className="bg-purple-500 text-white py-3 w-full rounded-full text-lg font-semibold hover:bg-purple-600">
           {buttonText}
         </button>

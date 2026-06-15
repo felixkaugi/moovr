@@ -4,9 +4,33 @@ import { useNavigate } from "react-router-dom";
 import { useSocket } from "../../context/LocationProvider";
 import toast from "react-hot-toast";
 
+import axios from "axios";
+import { BaseURL } from "../../utils/BaseURL";
+
 const TowardsJourney = ({ ride }) => {
   const { socket } = useSocket();
   const navigate = useNavigate();
+
+  const handleCancelRide = async () => {
+    if (!ride?._id) return;
+
+    if (!window.confirm("Are you sure you want to cancel this ride?")) return;
+
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.post(`${BaseURL}/rides/cancel/${ride._id}`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.status === 200) {
+        toast.success("Ride cancelled.");
+        navigate("/ride");
+      }
+    } catch (error) {
+      console.error("Error cancelling ride:", error);
+      toast.error("Failed to cancel ride.");
+    }
+  };
 
   useEffect(() => {
     if (!socket) return;
@@ -109,8 +133,11 @@ const TowardsJourney = ({ ride }) => {
       </div>
 
       <div className="flex gap-5 w-full">
-        <button className="bg-babyPurple text-primaryPurple w-full py-3 rounded-full">
-          Cancel
+        <button 
+          onClick={handleCancelRide}
+          className="bg-red-100 text-red-600 hover:bg-red-200 transition-colors w-full py-3 rounded-full font-semibold"
+        >
+          Cancel Ride
         </button>
         <div className="bg-babyPurple text-primaryPurple p-3 rounded-full">
           <img src="/icons/ride/shield.svg" alt="" className="w-full h-full" />

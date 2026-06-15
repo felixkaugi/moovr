@@ -5,7 +5,10 @@ import ReviewCard from "../../../components/user-panel/ride/review-card"; // Imp
 
 const ReviewScreen = () => {
   const location = useLocation();
-  const { driverId, driverName } = location.state || {};
+  const queryParams = new URLSearchParams(location.search);
+  const driverId = location.state?.driverId || queryParams.get("driverId");
+  const driverName = location.state?.driverName || queryParams.get("driverName");
+  const rideId = location.state?.rideId || queryParams.get("rideId");
 
   return (
     <div className="h-screen w-screen">
@@ -30,6 +33,7 @@ const ReviewScreen = () => {
             path={"/ride/thank-you"} 
             driverId={driverId} 
             driverName={driverName} 
+            rideId={rideId}
           />
         </div>
       </div>

@@ -4,6 +4,7 @@ import { Link , useNavigate } from "react-router-dom";
 import axios from "axios";
 import { BaseURL } from "../../utils/BaseURL";
 import Cookies from "js-cookie";
+import NotificationBadge from "../NotificationBadge";
 
 
 
@@ -74,7 +75,8 @@ const Header = () => {
 
       {/* Right Section - Profile & Sidebar */}
       <div className="relative">
-        <div className="flex items-center justify-center gap-3 md:gap-6">
+        <div className="flex items-center justify-center gap-3 md:gap-4">
+          <NotificationBadge />
           <Link to={"/d/wallet"}>
             <img src="/icons/header/wallet.svg" alt="Wallet" />
           </Link>

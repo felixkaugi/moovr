@@ -1,10 +1,17 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { FaChevronUp } from "react-icons/fa";
-import { Link } from "react-router-dom";
 
 const PaymentSelector = ({ onClick, onPaymentMethodChange, initialPayment = "Cash" }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState(initialPayment);
+
+  useEffect(() => {
+    setSelectedPayment(initialPayment);
+  }, [initialPayment]);
+
+  useEffect(() => {
+    setSelectedPayment(initialPayment);
+  }, [initialPayment]);
 
   const toggleDropdown = () => {
     setIsDropdownOpen(!isDropdownOpen);

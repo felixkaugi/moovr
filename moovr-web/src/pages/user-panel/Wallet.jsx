@@ -6,10 +6,6 @@ import { IoIosArrowDown, IoIosArrowUp } from "react-icons/io";
 import Header from "../../components/user-panel/header";
 import { BaseURL } from "../../utils/BaseURL";
 import { toast } from "react-hot-toast";
-import { loadStripe } from "@stripe/stripe-js";
-
-// Initialize Stripe
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
 const Wallet = () => {
   const [isBalanceVisible, setIsBalanceVisible] = useState(true);
@@ -120,17 +116,10 @@ const Wallet = () => {
       }
     );
 
-    const stripe = await stripePromise;
-    if (!stripe) {
-      throw new Error("Stripe failed to load. This can happen if an ad-blocker is active. Please disable it and try again.");
-    }
-
-    const { error } = await stripe.redirectToCheckout({
-      sessionId: response.data.sessionId,
-    });
-
-    if (error) {
-      throw error;
+    if (response.data.url) {
+      window.location.href = response.data.url;
+    } else {
+      throw new Error("Stripe checkout initialization failed");
     }
   } catch (error) {
     console.error("Full Payment Error:", {

@@ -2,13 +2,12 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import axios from "axios";
-import { signInWithPhoneNumber, signInWithRedirect, RecaptchaVerifier } from "firebase/auth";
-import { auth, googleProvider, firebaseConfig } from "../firebase";
+import { signInWithRedirect } from "firebase/auth";
+import { auth, googleProvider, firebaseConfig, sendOtp } from "../firebase";
 import { PhoneInput } from "react-international-phone";
 import "react-international-phone/style.css";
 import Cookies from "js-cookie";
 import { BaseURL } from "../utils/BaseURL";
-import { getStableRecaptchaVerifier } from "../utils/recaptcha";
 
 const Register = () => {
   const [countryCode, setCountryCode] = useState("+92");
@@ -16,22 +15,25 @@ const Register = () => {
   const [fullPhone, setFullPhone] = useState("+92");
   const navigate = useNavigate();
 
-  const handleCountryChange = (value) => {
-    const match = value.match(/^\+\d+/);
-    const code = match ? match[0] : "+92";
-    setCountryCode(code);
-    setFullPhone(code + userNumber);
+  const handleCountryChange = (phone, meta) => {
+    const dialCode = meta?.country?.dialCode ? `+${meta.country.dialCode}` : "+92";
+    setCountryCode(dialCode);
   };
 
   const handleUserNumberChange = (e) => {
     let number = e.target.value.replace(/\D/g, "");
-    // Strip leading zero if it exists (common error in phone auth)
     if (number.startsWith("0")) {
       number = number.substring(1);
     }
     setUserNumber(number);
-    setFullPhone(countryCode + number);
   };
+
+  // Sync fullPhone whenever countryCode or userNumber changes
+  useEffect(() => {
+    setFullPhone(countryCode + userNumber);
+  }, [countryCode, userNumber]);
+
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
@@ -42,13 +44,9 @@ const Register = () => {
     }
 
     try {
-      const appVerifier = await getStableRecaptchaVerifier();
-      if (!appVerifier) {
-        throw new Error("reCAPTCHA failed to initialize. Please refresh the page.");
-      }
-
+      setLoading(true);
       console.log("Sending OTP to:", fullPhone);
-      const confirmationResult = await signInWithPhoneNumber(auth, fullPhone, appVerifier);
+      const confirmationResult = await sendOtp(fullPhone);
       window.confirmationResult = confirmationResult;
 
       toast.success("OTP sent successfully!");
@@ -75,6 +73,8 @@ const Register = () => {
       }
 
       toast.error(errorMessage);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -156,8 +156,6 @@ const Register = () => {
               Continue
             </button>
           </form>
-
-          <div id="recaptcha-container"></div>
 
           <div className="text-center mt-4">
             <p>

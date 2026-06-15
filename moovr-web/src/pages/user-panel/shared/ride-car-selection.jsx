@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Header from "../../../components/user-panel/header"; // Import your Header component
 import RideOptions from "../../../components/user-panel/ride-options";
 import PaymentSelector from "../../../components/user-panel/payment-selector";
+import DriverInfoCard from "../../../components/user-panel/driver-info-card";
 import axios from "axios";
 import { BaseURL } from "../../../utils/BaseURL";
 import toast, { Toaster } from "react-hot-toast";
@@ -15,12 +16,17 @@ const RideSelectionScreen = () => {
   const [loading, setLoading] = useState(false);
   const [vehicleType, setVehicleType] = useState("moovr x");
   const [paymentMethod, setPaymentMethod] = useState("Cash");
+  const [rideId, setRideId] = useState(null);
+  const [acceptedRide, setAcceptedRide] = useState(null);
+  const [statusText, setStatusText] = useState("Searching for nearby drivers...");
+  const [showAcceptedBadge, setShowAcceptedBadge] = useState(false);
   const rideData = location.state?.rideData;
   const [nearbyDrivers, setNearbyDrivers] = useState([]);
   
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const markersRef = useRef([]);
+  const redirectTimeout = useRef(null);
 
   const loadGoogleMapsScript = () => {
     return new Promise((resolve, reject) => {
@@ -125,7 +131,41 @@ const RideSelectionScreen = () => {
       socket.on("rideAccepted", (ride) => {
         console.log("Ride accepted via socket:", ride);
         toast.success("Ride accepted!");
-        navigate("/ride/meet", { state: { rideId: ride._id } });
+        setAcceptedRide(ride);
+        setShowAcceptedBadge(true);
+        setStatusText("Driver accepted your ride. Showing driver progress...");
+        setLoading(false);
+        // Auto-navigate passenger to meet screen so state is persisted by query param
+        try {
+          navigate(`/ride/meet?rideId=${ride._id}`, { state: { ride } });
+        } catch (e) {
+          console.warn("Failed to auto-navigate to meet screen:", e);
+        }
+      });
+
+      socket.on("rideStatusUpdated", (updatedRide) => {
+        if (!rideId || updatedRide._id !== rideId) return;
+
+        setAcceptedRide(updatedRide);
+        setLoading(false);
+
+        if (updatedRide.status === "completed") {
+          setShowAcceptedBadge(false);
+          setStatusText("Ride completed. Redirecting to payment and rating...");
+          navigate(`/ride/completed?rideId=${updatedRide._id}`, {
+            state: { rideId: updatedRide._id, ride: updatedRide },
+          });
+          return;
+        }
+
+        setShowAcceptedBadge(true);
+        setStatusText(
+          updatedRide.status === "running"
+            ? "Driver is almost here. Tracking your ride..."
+            : updatedRide.status === "arrived"
+              ? "Your driver has arrived!"
+              : "Ride status updated."
+        );
       });
 
       // Listen for driver location updates to move markers in real-time
@@ -137,10 +177,54 @@ const RideSelectionScreen = () => {
     return () => {
       if (socket) {
         socket.off("rideAccepted");
+        socket.off("rideStatusUpdated");
         socket.off("driverLocationUpdate");
       }
     };
-  }, [socket, navigate]);
+  }, [socket, rideId]);
+
+  useEffect(() => {
+    let pollInterval;
+
+    const pollRideStatus = async () => {
+      if (!rideId) return;
+      try {
+        const token = localStorage.getItem("token");
+        const response = await axios.get(`${BaseURL}/rides/status/${rideId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const ride = response.data.ride;
+        if (ride?.status === "accepted") {
+          setAcceptedRide(ride);
+          setLoading(false);
+          setShowAcceptedBadge(true);
+          setStatusText("Ride accepted! Showing driver progress...");
+        }
+
+        if (ride?.status === "completed") {
+          setAcceptedRide(ride);
+          setLoading(false);
+          setShowAcceptedBadge(false);
+          setStatusText("Ride completed. Redirecting to payment and rating...");
+          navigate(`/ride/completed?rideId=${ride._id}`, {
+            state: { rideId: ride._id, ride },
+          });
+        }
+      } catch (error) {
+        console.error("Error polling ride status:", error);
+      }
+    };
+
+    if (rideId) {
+      pollInterval = setInterval(pollRideStatus, 5000);
+      pollRideStatus();
+    }
+
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [rideId, navigate]);
 
   const handleCreateRide = async () => {
     if (!rideData) return;
@@ -155,6 +239,8 @@ const RideSelectionScreen = () => {
       });
 
       if (response.status === 201) {
+        setRideId(response.data.ride._id);
+        setStatusText("Searching for nearby drivers...");
         toast.success("Ride created! Waiting for driver...");
       } else {
         toast.error("Failed to create ride. Please try again.");
@@ -164,6 +250,27 @@ const RideSelectionScreen = () => {
       toast.error("Error creating ride. Please try again.");
       console.error("Error creating ride:", error);
       setLoading(false);
+    }
+  };
+
+  const handleCancelRide = async () => {
+    if (!rideId) return;
+
+    try {
+      const response = await axios.post(`${BaseURL}/rides/cancel/${rideId}`, {}, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+
+      if (response.status === 200) {
+        toast.success("Ride cancelled successfully.");
+        setLoading(false);
+        setRideId(null);
+      }
+    } catch (error) {
+      toast.error("Error cancelling ride.");
+      console.error("Error cancelling ride:", error);
     }
   };
 
@@ -180,21 +287,82 @@ const RideSelectionScreen = () => {
 
         {/* Floating Cards */}
         <div className="absolute top-[10%] left-[10%]  flex flex-col items-center space-y-4">
-          {/* Ride Options */}
-          <RideOptions onSelect={(type) => setVehicleType(type)} />
+          {acceptedRide ? (
+            <DriverInfoCard ride={acceptedRide} />
+          ) : (
+            <>
+              {/* Ride Options */}
+              <RideOptions onSelect={(type) => setVehicleType(type)} />
 
-          {/* Payment Selector */}
-          <PaymentSelector 
-            onClick={handleCreateRide} 
-            onPaymentMethodChange={(method) => setPaymentMethod(method)} 
-            initialPayment={paymentMethod}
-          />
+              {/* Available drivers panel */}
+              <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-4 w-[320px] mt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Drivers Nearby</h3>
+                    <p className="text-xs text-gray-500">{nearbyDrivers.length} available</p>
+                  </div>
+                  <span className="text-xs font-semibold text-purple-600">Live</span>
+                </div>
+                <div className="space-y-3 max-h-72 overflow-y-auto pr-2">
+                  {nearbyDrivers.length === 0 ? (
+                    <p className="text-sm text-gray-500">Searching for nearby drivers...</p>
+                  ) : (
+                    nearbyDrivers.map((driver) => (
+                      <div key={driver._id} className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                        {driver.profilePicture ? (
+                          <img
+                            src={driver.profilePicture}
+                            alt={driver.firstName}
+                            className="w-12 h-12 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 text-lg font-semibold">
+                            {driver.firstName?.[0] || "D"}
+                          </div>
+                        )}
+                        <div className="flex-1 text-left">
+                          <p className="font-semibold text-sm text-slate-900">{driver.firstName} {driver.lastName}</p>
+                          <p className="text-xs text-slate-500">{driver.carCategory || driver.serviceType || "MoovR"}</p>
+                          <div className="flex items-center gap-2 text-xs text-yellow-500 mt-1">
+                            <span>★ {driver.ratingAverage?.toFixed(1) || "0.0"}</span>
+                            <span className="text-slate-400">•</span>
+                            <span className="text-slate-500">{driver.availability ? "Available" : "Offline"}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Payment Selector */}
+              <PaymentSelector 
+                onClick={handleCreateRide} 
+                onPaymentMethodChange={(method) => setPaymentMethod(method)} 
+                initialPayment={paymentMethod}
+              />
+            </>
+          )}
         </div>
 
-        {/* Loading Spinner */}
+        {/* Loading Spinner / Searching for Driver */}
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
-            <div className="loader"></div>
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-70 z-[100]">
+            <div className="loader mb-6"></div>
+            <div className="flex flex-col items-center gap-4">
+              <div className="text-white text-xl font-semibold text-center">{statusText}</div>
+              {showAcceptedBadge && (
+                <div className="bg-emerald-500 text-white rounded-full px-5 py-2 text-sm font-semibold shadow-lg">
+                  Driver accepted your ride
+                </div>
+              )}
+            </div>
+            <button 
+              onClick={handleCancelRide}
+              className="mt-6 bg-red-500 hover:bg-red-600 text-white px-8 py-3 rounded-full font-bold transition-colors shadow-lg"
+            >
+              Cancel Ride
+            </button>
           </div>
         )}
       </div>

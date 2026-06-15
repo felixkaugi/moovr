@@ -6,7 +6,6 @@ import { IoIosArrowDown, IoIosArrowUp } from "react-icons/io";
 import Header from "../../components/driver-panel/header";
 import { BaseURL } from "../../utils/BaseURL";
 import { toast } from "react-hot-toast";
-import { loadStripe } from "@stripe/stripe-js";
 import { Link } from "react-router-dom";
 
 const Wallet = () => {
@@ -18,11 +17,6 @@ const Wallet = () => {
   const [transactions, setTransactions] = useState([]); // State for transactions
   const [isWithdrawVisible, setIsWithdrawVisible] = useState(false); // Manage withdraw form visibility
   const [isAddCashVisible, setIsAddCashVisible] = useState(false); // Manage add cash form visibility
-
-  // Initialize Stripe
-  const stripePromise = loadStripe(
-    import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
-  ); // Replace with your Stripe publishable key
 
   // Fetch wallet balance and transactions on component load
   useEffect(() => {
@@ -69,11 +63,9 @@ const Wallet = () => {
         return toast.error("User not found. Please log in again.");
       }
 
-      const amountInKobo = Math.round(Number(amount) * 100);
-
       const res = await axios.post(
         `${BaseURL}/wallet/create-payment-intent`,
-        { amount: amountInKobo, userId },
+        { amount: Number(amount), userId },
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -82,17 +74,10 @@ const Wallet = () => {
         }
       );
 
-      const stripe = await stripePromise;
-      if (!stripe) {
-        throw new Error("Stripe failed to load. This can happen if an ad-blocker is active. Please disable it and try again.");
-      }
-
-      const { error } = await stripe.redirectToCheckout({
-        sessionId: res.data.sessionId,
-      });
-
-      if (error) {
-        throw error;
+      if (res.data.url) {
+        window.location.href = res.data.url;
+      } else {
+        throw new Error("Stripe checkout initialization failed");
       }
     } catch (err) {
       console.error("Driver top-up error:", err.response?.data || err);

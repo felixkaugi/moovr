@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import { getAuth, GoogleAuthProvider, signInWithPhoneNumber } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, signInWithPhoneNumber, RecaptchaVerifier, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -12,7 +12,6 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-console.log("Firebase Initialized for domain:", typeof window !== "undefined" ? window.location.hostname : "server");
 if (!firebaseConfig.apiKey) {
   console.error("Firebase API Key is missing! Check your .env file.");
 }
@@ -24,14 +23,56 @@ auth.useDeviceLanguage();
 
 export { auth, app, analytics };
 
-// Export the config for use in other modules
+let globalVerifier = null;
+
+export const sendOtp = async (phoneNumber, containerId = "recaptcha-container") => {
+  try {
+    if (globalVerifier) {
+      try { globalVerifier.clear(); } catch (e) {}
+      globalVerifier = null;
+    }
+
+    let container = document.getElementById(containerId);
+    if (!container) {
+      container = document.createElement("div");
+      container.id = containerId;
+      document.body.appendChild(container);
+    }
+    container.innerHTML = "";
+
+    console.log("Initializing RecaptchaVerifier for:", phoneNumber);
+
+    // Explicitly pass the Enterprise score-based site key
+    const enterpriseKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+    console.log("Using reCAPTCHA Enterprise key:", enterpriseKey);
+
+    globalVerifier = new RecaptchaVerifier(auth, containerId, {
+      size: "invisible",
+      ...(enterpriseKey && { "recaptcha-enterprise-site-key": enterpriseKey }),
+      callback: () => console.log("reCAPTCHA solved"),
+      "expired-callback": () => {
+        if (globalVerifier) { try { globalVerifier.clear(); } catch (e) {} }
+        globalVerifier = null;
+      }
+    });
+
+    await globalVerifier.render();
+    const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, globalVerifier);
+    return confirmationResult;
+
+  } catch (error) {
+    console.error("sendOtp Critical Failure:", error);
+    if (globalVerifier) {
+      try { globalVerifier.clear(); } catch (e) {}
+      globalVerifier = null;
+    }
+    throw error;
+  }
+};
+
 export { firebaseConfig };
 
-// Configure Google provider with better settings
 export const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({
-  prompt: "select_account"
-});
+googleProvider.setCustomParameters({ prompt: "select_account" });
 
-// Export authentication function
-export { signInWithPhoneNumber };
+export { signInWithPhoneNumber, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail };

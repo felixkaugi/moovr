@@ -5,7 +5,7 @@ import axios from "axios";
 import { BaseURL } from "../../../utils/BaseURL";
 import toast from "react-hot-toast";
 
-const ReviewCard = ({ driverId, driverName, driverImage, path }) => {
+const ReviewCard = ({ driverId, driverName, driverImage, path, rideId }) => {
   const [rating, setRating] = useState(0);
   const [hover, setHover] = useState(0);
   const [comment, setComment] = useState("");
@@ -25,25 +25,24 @@ const ReviewCard = ({ driverId, driverName, driverImage, path }) => {
       toast.error("Please provide a feedback comment");
       return;
     }
-    if (!driverId) {
-      toast.error("Driver information missing");
+    if (!rideId && !driverId) {
+      toast.error("Driver or ride information missing");
       return;
     }
 
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      await axios.post(
-        `${BaseURL}/reviews`,
-        {
-          rating,
-          comment,
-          driverId,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const endpoint = rideId
+        ? `${BaseURL}/rides/rate/${rideId}`
+        : `${BaseURL}/reviews`;
+      const payload = rideId
+        ? { rating, comment }
+        : { rating, comment, driverId };
+
+      await axios.post(endpoint, payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       toast.success("Review submitted! Thank you.");
       navigate(path || "/ride/thank-you");

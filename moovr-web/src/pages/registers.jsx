@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { signInWithPhoneNumber, RecaptchaVerifier } from "firebase/auth";
-import { auth } from "../firebase";
+import { auth, sendOtp } from "../firebase";
 import axios from "axios";
 import { BaseURL } from "../utils/BaseURL";
-import { getStableRecaptchaVerifier } from "../utils/recaptcha";
 
 const MultiStepForm = () => {
   const [step, setStep] = useState(1);
@@ -35,18 +33,12 @@ const MultiStepForm = () => {
     e.preventDefault();
     setError(""); // Reset previous errors
     try {
-      const appVerifier = await getStableRecaptchaVerifier();
-      if (!appVerifier) {
-        throw new Error("reCAPTCHA failed to initialize. Please refresh the page.");
-      }
-      
-      const confirmationResult = await signInWithPhoneNumber(auth, formData.phone, appVerifier);
+      console.log("Attempting to send OTP via sendOtp helper (MultiStep)...");
+      const confirmationResult = await sendOtp(formData.phone);
 
       // Store confirmationResult globally to access it in the verification page
       window.confirmationResult = confirmationResult;
 
-      // For debugging, you can show the OTP if needed, but in production this shouldn't be done
-      // const otp = confirmationResult.verificationId; // Not the actual OTP
       console.log("OTP sent via Firebase");
 
       setStep(2); // Move to the next step
@@ -126,7 +118,6 @@ const MultiStepForm = () => {
             />
           </div>
           <button type="submit">Generate OTP</button>
-          <div id="recaptcha-container"></div>
           {error && <p className="error">{error}</p>}
         </form>
       )}

@@ -1,16 +1,46 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
+import axios from "axios";
 import Header from "../../../components/user-panel/header"; // Import your Header component
 import StartRideCard from "../../../components/user-panel/start-ride-card"; // Import the new DriverInfoCard component
+import { BaseURL } from "../../../utils/BaseURL";
+import usePreventLeave from "../../../hooks/usePreventLeave";
 
 const StartRideScreen = () => {
   const location = useLocation();
-  const { ride } = location.state || {};
+  const [ride, setRide] = useState(location.state?.ride || null);
+  const [loading, setLoading] = useState(!Boolean(location.state?.ride));
+  const rideId = location.state?.ride?._id || new URLSearchParams(location.search).get("rideId");
+
+  usePreventLeave(true);
+
+  useEffect(() => {
+    const fetchRide = async () => {
+      if (ride || !rideId) return;
+      setLoading(true);
+      try {
+        const token = localStorage.getItem("token");
+        const response = await axios.get(`${BaseURL}/rides/status/${rideId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (response.data?.ride) {
+          setRide(response.data.ride);
+        }
+      } catch (error) {
+        console.error("Unable to fetch ride for start ride screen:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRide();
+  }, [ride, rideId]);
 
   return (
     <div className="h-screen w-screen">
       {/* Header */}
-      <Header />
+      <Header disableNavigation />
 
       {/* Main Content */}
       <div className="relative h-full">
@@ -25,8 +55,13 @@ const StartRideScreen = () => {
 
         {/* Floating Driver Info Card */}
         <div className="absolute top-[10%] left-[10%]  flex flex-col items-center space-y-4">
-          {/* Driver Info Card */}
-          <StartRideCard ride={ride} />
+          {loading ? (
+            <div className="bg-white rounded-2xl shadow-lg p-6 w-[350px] text-center">
+              <p className="text-gray-700">Loading ride details...</p>
+            </div>
+          ) : (
+            <StartRideCard ride={ride} />
+          )}
         </div>
       </div>
     </div>

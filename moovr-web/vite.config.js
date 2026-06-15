@@ -15,10 +15,6 @@ export default defineConfig({
             if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
               return 'react-vendor';
             }
-            // Firebase
-            if (id.includes('firebase')) {
-              return 'firebase-vendor';
-            }
             // UI libraries
             if (id.includes('react-hot-toast') || id.includes('react-international-phone') ||
                 id.includes('react-icons') || id.includes('react-datepicker') ||

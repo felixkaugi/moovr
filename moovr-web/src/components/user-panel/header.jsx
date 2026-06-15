@@ -1,10 +1,12 @@
 import axios from "axios";
 import React, { useState, useEffect } from "react";
-import { FaChevronDown, FaChevronUp, FaBars, FaTimes, FaUserCircle } from "react-icons/fa";
-import { Link } from "react-router-dom";
+import { FaChevronDown, FaChevronUp, FaBars, FaTimes, FaUserCircle, FaChevronLeft } from "react-icons/fa";
+import { Link, useNavigate } from "react-router-dom";
 import { BaseURL } from "../../utils/BaseURL";
+import NotificationBadge from "../NotificationBadge";
 
-const Header = () => {
+const Header = ({ disableNavigation = false, showBackButton = false }) => {
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedNav, setSelectedNav] = useState("Ride");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -40,6 +42,26 @@ const Header = () => {
 
     fetchUserData();
   }, []); // Empty dependency array means this runs once on component mount
+
+  if (disableNavigation) {
+    return (
+      <header className="flex items-center justify-between px-8 pb-5 pt-8 z-50 shadow-md bg-white">
+        <div className="flex items-center space-x-4">
+          {showBackButton && (
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-2 text-gray-700 font-semibold"
+            >
+              <FaChevronLeft /> Back
+            </button>
+          )}
+          <img src="/images/logo.svg" alt="Logo" className="h-[40px] w-auto" />
+        </div>
+        <div className="text-sm font-medium text-gray-500">Ride in progress</div>
+      </header>
+    );
+  }
 
   return (
     <header className="flex items-center justify-between px-8 pb-5 pt-8 z-50 shadow-md bg-white">
@@ -83,7 +105,8 @@ const Header = () => {
 
       <div className="relative">
         {/* Profile Button */}
-        <div className="flex items-center justify-center gap-3 md:gap-6">
+        <div className="flex items-center justify-center gap-3 md:gap-4">
+          <NotificationBadge />
           <Link to={"/wallet"}>
             <img src="/icons/header/wallet.svg" alt="" />
           </Link>
@@ -169,6 +192,10 @@ const Header = () => {
               <Link
                 to={"/"}
                 className="px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center space-x-4"
+                onClick={() => {
+                  localStorage.removeItem("token");
+                  localStorage.removeItem("userData");
+                }}
               >
                 <img src="/icons/header/logout.svg" alt="" />
                 <span>Log out</span>

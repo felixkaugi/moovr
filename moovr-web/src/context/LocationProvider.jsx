@@ -24,20 +24,32 @@ export const SocketProvider = ({ children }) => {
     setSocket(socketInstance);
 
     // Join room when user data is available
-    const userDataStr = localStorage.getItem("userData");
-    if (userDataStr) {
+    let joinedUserId = null;
+
+    const tryJoin = () => {
+      const userDataStr = localStorage.getItem("userData");
+      if (!userDataStr) return;
       try {
         const userData = JSON.parse(userDataStr);
-        if (userData._id) {
+        if (userData._id && joinedUserId !== userData._id) {
           socketInstance.emit("join", userData._id);
+          joinedUserId = userData._id;
+          console.log(`Socket joined room for user ${userData._id}`);
         }
       } catch (e) {
         console.error("Error parsing userData for socket join", e);
       }
-    }
+    };
+
+    // Try initial join
+    tryJoin();
+
+    // Poll localStorage briefly to catch post-mount logins in the same window
+    const pollInterval = setInterval(tryJoin, 1000);
 
     // Cleanup when component unmounts
     return () => {
+      clearInterval(pollInterval);
       socketInstance.disconnect();
     };
   }, []);

@@ -11,8 +11,14 @@ const StartRide = ({ ride }) => {
     if (!socket) return;
 
     const handleStatusUpdate = (updatedRide) => {
-      if (updatedRide._id === ride?._id && updatedRide.status === "running") {
+      if (updatedRide._id !== ride?._id) return;
+
+      if (updatedRide.status === "running") {
         navigate("/ride-car/towards-destination", { state: { ride: updatedRide } });
+      }
+
+      if (updatedRide.status === "completed") {
+        navigate("/ride/completed", { state: { rideId: updatedRide._id, ride: updatedRide } });
       }
     };
 

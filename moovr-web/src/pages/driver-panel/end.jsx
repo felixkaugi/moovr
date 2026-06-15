@@ -53,16 +53,12 @@ const End = () => {
       }
 
       if (response.status === 200) {
-        if (response.data.paymentStatus === "pending" && response.data.paymentUrl) {
-          toast.success("Ride status updated. Redirecting to payment...");
-          window.location.href = response.data.paymentUrl;
-        } else if (response.data.paymentStatus === "failed") {
+        if (response.data.paymentStatus === "failed") {
           toast.error(`Ride status updated but payment failed: ${response.data.reason || "Unknown error"}`);
-          navigate("/d/completed");
         } else {
           toast.success("Ride completed successfully!");
-          navigate("/d/completed");
         }
+        navigate("/d/completed");
       } else {
         toast.error("Failed to complete the ride. Please try again.");
       }

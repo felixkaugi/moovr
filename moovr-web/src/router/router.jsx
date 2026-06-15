@@ -1,7 +1,8 @@
 import React, { useState , useEffect, useMemo } from "react";
 import Cookies from "js-cookie";
-import { createBrowserRouter, RouterProvider, createRoutesFromElements, Route, Navigate, useLocation } from "react-router-dom";
+import { createBrowserRouter, RouterProvider, createRoutesFromElements, Route, Navigate, useLocation, Outlet } from "react-router-dom";
 import toast from "react-hot-toast";
+import { NotificationProvider } from "../context/NotificationProvider";
 
 
 
@@ -191,15 +192,20 @@ export const PublicRoute = ({ element }) => {
   return element;
 };
 
-
+const Layout = () => {
+  return (
+    <NotificationProvider>
+      <Outlet />
+    </NotificationProvider>
+  );
+};
 
 const App = () => {
   const [userData, setUserData] = useState({});
 
-
   const router = useMemo(() => createBrowserRouter(
     createRoutesFromElements(
-      <Route>
+      <Route element={<Layout />}>
 
 
 

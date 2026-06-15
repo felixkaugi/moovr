@@ -1,24 +1,22 @@
 import React, { useState, useEffect } from "react";
-import { PhoneInput } from "react-international-phone";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-hot-toast";
-import { getRedirectResult, signInWithPopup, signInWithRedirect, signInWithPhoneNumber, RecaptchaVerifier } from "firebase/auth";
+import { getRedirectResult, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { auth, googleProvider } from "../../../firebase";
 import Cookies from "js-cookie";
-import "react-international-phone/style.css";
 import "react-toastify/dist/ReactToastify.css";
 import { BaseURL } from "../../../utils/BaseURL";
-
-import { getStableRecaptchaVerifier } from "../../../utils/recaptcha";
 
 const Login = () => {
   const location = useLocation();
   const role = location.state?.role || null; // fallback to null if not provided
 
-  const [countryCode, setCountryCode] = useState("+92"); // Default country code
-  const [userNumber, setUserNumber] = useState("");
-  const [fullPhone, setFullPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -38,22 +36,46 @@ const Login = () => {
 
   const [loading, setLoading] = useState(false);
 
-  const handleGoogleLoginResult = async (result) => {
-    try {
-      setLoading(true);
-      const user = result.user;
-      const idToken = await user.getIdToken();
-      console.log("Google Auth successful, verifying with backend...");
+  const handleForgotPassword = async (e) => {
+    if (e) e.preventDefault();
+    if (!forgotEmail) {
+      toast.error("Please enter your email address");
+      return;
+    }
 
-      const response = await axios.post(`${BaseURL}/auth/google-login`, {
+    try {
+      setIsResetting(true);
+      await sendPasswordResetEmail(auth, forgotEmail);
+      toast.success("Password reset email sent! Check your inbox.");
+      setShowForgotModal(false);
+      setForgotEmail("");
+    } catch (error) {
+      console.error("Reset Error:", error);
+      let message = "Failed to send reset email.";
+      if (error.code === "auth/user-not-found") {
+        message = "No account found with this email.";
+      }
+      toast.error(message);
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const handleLoginSuccess = async (user) => {
+    try {
+      const idToken = await user.getIdToken();
+      console.log("Auth successful, verifying with backend...");
+
+      const response = await axios.post(`${BaseURL}/auth/firebase-verify`, {
         idToken,
         role: role || "user"
       });
 
       console.log("Backend response:", response.data);
 
+      const { user: backendUser, isRegistered } = response.data;
       if (response.data.token) {
-        const { token, user: backendUser } = response.data;
+        const { token } = response.data;
         const roleToSet = backendUser.role || role || "user";
 
         Cookies.set("token", token, { expires: 7, path: '/' });
@@ -64,16 +86,14 @@ const Login = () => {
 
         toast.success("Login successful!");
         
-        // Check if driver setup is complete
-        const isProfileComplete = backendUser.profilePicture && 
-                                backendUser.documents?.proofOfResidency &&
-                                backendUser.documents?.drivingLicense && 
-                                backendUser.documents?.vehicleRegistrationBook &&
-                                backendUser.documents?.vehicleInsurance &&
-                                backendUser.termsAccepted;
-
-        let target = "/ride"; // default
+        let target = "/ride";
         if (roleToSet === "driver") {
+          const isProfileComplete = backendUser.profilePicture && 
+                                  backendUser.documents?.proofOfResidency &&
+                                  backendUser.documents?.drivingLicense && 
+                                  backendUser.documents?.vehicleRegistrationBook &&
+                                  backendUser.documents?.vehicleInsurance &&
+                                  backendUser.termsAccepted;
           target = isProfileComplete ? "/d/dashboard" : "/d/";
         }
 
@@ -81,82 +101,52 @@ const Login = () => {
         setTimeout(() => {
           window.location.href = target;
         }, 500);
+      } else if (backendUser && isRegistered === false) {
+        localStorage.setItem("userData", JSON.stringify(backendUser));
+        toast.success("Please complete your profile to continue.");
+        navigate("/name");
       } else {
-        // User does not exist, redirect to signup with Google data
-        toast.success("Google account linked! Please complete your registration.");
-        const userData = {
-          name: user.displayName,
-          email: user.email,
-          uid: user.uid,
-          photoURL: user.photoURL,
-          role: role || "user"
-        };
-        localStorage.setItem("userData", JSON.stringify(userData));
-        
-        // Redirect to signup page
-        navigate(role === "driver" ? "/d/signup" : "/signup", { 
-          state: { googleData: userData } 
-        });
+        toast.error(response.data.message || "Login failed.");
       }
     } catch (error) {
+      console.error("Backend Verification Error:", error);
+      toast.error(error.response?.data?.message || error.message || "Login failed.");
+    }
+  };
+
+  const handleGoogleLoginResult = async (result) => {
+    try {
+      setLoading(true);
+      await handleLoginSuccess(result.user);
+    } catch (error) {
       console.error("Google Login Error:", error);
-      toast.error(error.response?.data?.message || error.message || "Google Sign-In failed.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCountryChange = (value) => {
-    const match = value.match(/^\+\d+/);
-    const code = match ? match[0] : "+234";
-    setCountryCode(code);
-    setFullPhone(code + userNumber);
-  };
-
-  const handleUserNumberChange = (e) => {
-    let number = e.target.value.replace(/\D/g, "");
-    // Strip leading zero if it exists (common error in phone auth)
-    if (number.startsWith("0")) {
-      number = number.substring(1);
-    }
-    setUserNumber(number);
-    setFullPhone(countryCode + number);
-  };
-
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
-    console.log("your full phone number is :", fullPhone);
 
-    if (userNumber.length < 6) {
-      toast.error("Please enter a valid phone number");
+    if (!email || !password) {
+      toast.error("Please enter both email and password");
       return;
     }
 
     try {
-      const appVerifier = await getStableRecaptchaVerifier();
-      if (!appVerifier) {
-        throw new Error("Unable to initialize reCAPTCHA. Please refresh the page and try again.");
-      }
-
-      const confirmationResult = await signInWithPhoneNumber(auth, fullPhone, appVerifier);
-      
-      // Store confirmationResult globally to access it in the verification page
-      window.confirmationResult = confirmationResult;
-      
-      toast.success("OTP sent successfully!");
-      
-      // Merge with existing userData (like Google info) if it exists
-      const existingData = JSON.parse(localStorage.getItem("userData") || "{}");
-      localStorage.setItem("userData", JSON.stringify({ ...existingData, phone: fullPhone }));
-
-      // ✅ Navigate with role passed in state
-      navigate(role === "driver" ? "/d/verification" : "/verification", {
-        state: { role },
-      });
+      setLoading(true);
+      console.log("Attempting to sign in with email/password...");
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      await handleLoginSuccess(result.user);
     } catch (error) {
-      console.error("Firebase SMS Error:", error);
-      const errorMessage = error.message || "Failed to send OTP. Please check your phone number.";
+      console.error("Login Error:", error);
+      let errorMessage = "Failed to sign in. Please check your credentials.";
+      if (error.code === "auth/user-not-found" || error.code === "auth/wrong-password" || error.code === "auth/invalid-credential") {
+        errorMessage = "Invalid email or password.";
+      }
       toast.error(errorMessage);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -191,66 +181,49 @@ const Login = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white shadow-lg rounded-lg overflow-hidden max-w-5xl h-[550px] grid md:grid-cols-2">
         <div className="p-8 w-96 mx-auto">
-          <h2 className="text-2xl font-bold mb-4">Enter your mobile number</h2>
+          <h2 className="text-2xl font-bold mb-4 text-center">Login to your account</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="flex items-center bg-gray-50 rounded-full px-3 py-2 space-x-2">
-              <div className="relative inline-flex">
-                <PhoneInput
-                  defaultCountry="ng"
-                  preferredCountries={["ng", "us", "gb"]}
-                  value={countryCode}
-                  onChange={handleCountryChange}
-                  inputClassName="hidden"
-                  countrySelectorStyleProps={{
-                    buttonClassName: `
-                      !p-0 !bg-transparent !border-none !shadow-none
-                      !h-10 !w-auto !px-2
-                      flex items-center justify-center gap-1
-                      focus:!ring-0
-                      group
-                    `,
-                    flagClassName: `
-                      !w-6 !h-6 rounded-full object-cover
-                      border border-gray-100 shadow-sm
-                    `,
-                    dropdownArrowClassName: `
-                      !ml-0 !text-gray-500 !w-4 
-                      transition-transform duration-200
-                      group-hover:!text-gray-700
-                      group-data-[active=true]:rotate-180
-                    `,
-                    dropdownStyleProps: {
-                      className: `
-                        !mt-2 !left-0 !min-w-[220px]
-                        !rounded-xl !shadow-lg !border !border-gray-200
-                        !py-2
-                      `,
-                    },
-                  }}
-                />
-              </div>
-              <div className="text-base text-gray-700 font-medium h-12 flex items-center px-2">
-                {countryCode}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 ml-1">Email Address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-full px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                placeholder="example@mail.com"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between items-center ml-1">
+                <label className="text-sm font-medium text-gray-700">Password</label>
+                <button 
+                  type="button"
+                  onClick={() => setShowForgotModal(true)}
+                  className="text-xs text-purple-600 hover:underline font-medium"
+                >
+                  Forgot Password?
+                </button>
               </div>
               <input
-                type="tel"
-                value={userNumber}
-                onChange={handleUserNumberChange}
-                className="flex-1 bg-transparent focus:outline-none h-12 text-base placeholder:text-gray-400"
-                placeholder="Phone number"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-full px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                placeholder="••••••••"
+                required
               />
             </div>
 
             <button
               type="submit"
-              className="w-full py-3 mt-3 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-colors shadow-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+              disabled={loading}
+              className="w-full py-3 mt-4 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-colors shadow-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:bg-purple-300"
             >
-              Continue
+              {loading ? "Signing in..." : "Continue"}
             </button>
           </form>
-
-          {/* reCAPTCHA container */}
-          <div id="recaptcha-container"></div>
 
           <div className="text-center mt-4">
             <p>
@@ -294,9 +267,7 @@ const Login = () => {
           </div>
 
           <p className="text-xs text-gray-500 mt-6 text-center">
-            By proceeding, you consent to get calls, WhatsApp or SMS messages,
-            including by automated dialer, from MovoR and its affiliates to the
-            number provided. Text "STOP" to 67890 to opt out.
+            By proceeding, you agree to our Terms of Service and Privacy Policy.
           </p>
         </div>
 
@@ -308,6 +279,44 @@ const Login = () => {
           />
         </div>
       </div>
+
+      {/* Forgot Password Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000] p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
+            <h3 className="text-xl font-bold mb-2">Reset Password</h3>
+            <p className="text-gray-600 text-sm mb-6">
+              Enter your email address and we'll send you a link to reset your password.
+            </p>
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <input
+                type="email"
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-full px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                placeholder="example@mail.com"
+                required
+              />
+              <div className="flex space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowForgotModal(false)}
+                  className="flex-1 py-3 border border-gray-300 rounded-full text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResetting}
+                  className="flex-1 py-3 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-colors disabled:bg-purple-300"
+                >
+                  {isResetting ? "Sending..." : "Send Link"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
